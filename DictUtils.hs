@@ -20,6 +20,10 @@ import Data.Semigroup (Semigroup(..))
 import GHC.Base (Functor(..), Applicative(..), Monad(..), Eq(..), Ord(..))
 import GHC.Exts (Constraint)
 
+import Data.Monoid
+import Data.Semigroup
+import Control.Monad.Writer
+
 
 mkEqDict :: (a -> a -> Bool) -> Eq.Dict a
 mkEqDict eq = Eq.Dict
@@ -95,3 +99,47 @@ instance HasDict (Monad m) where
         , return = return
         , fail = fail
         }
+
+instance HasDict (Semigroup a) where
+    type Dict (Semigroup a) = Semigroup.Dict a
+    getDict = Semigroup.Dict
+        { (<>) = (<>)
+        , sconcat = sconcat
+        , stimes = stimes
+        }
+
+instance HasDict (Monoid a) where
+    type Dict (Monoid a) = Monoid.Dict a
+    getDict = Monoid.Dict
+        { parent1 = getDict @(Semigroup a)
+        , mempty = mempty
+        , mappend = mappend
+        , mconcat = mconcat
+        }
+
+instance Monoid w => HasDict (MonadWriter w m) where
+    type Dict (MonadWriter w m) = MonadWriter.Dict w m
+    getDict = MonadWriter.Dict
+        { parent1 = getDict @(Monoid w)
+        , parent2 = getDict @(Monad m)
+        , writer = writer
+        , tell = tell
+        , listen = listen
+        , pass = pass
+        }
+
+class Monad m => MonadLogger m where
+    logStr :: String -> m ()
+
+logToFile :: FilePath -> MonadLogger.Dict IO
+logToFile fp = MonadLogger.Dict
+    { parent1 = getDict @(Monad IO)
+    , logStr = \s -> writeFile fp s
+    }
+
+logToStdOut :: MonadLogger.Dict IO
+logToStdOut = MonadLogger.Dict
+    { parent1 = getDict @(Monad IO)
+    , logStr = putStr
+    }
+
